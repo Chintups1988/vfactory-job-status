@@ -278,16 +278,47 @@ app.patch('/api/units/:unitId/status', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Status is required' });
         }
         
-        await pool.execute(
-            'UPDATE units SET status = ? WHERE id = ?',
-            [status, unitId]
+        // Get current unit to check previous status
+        const [currentUnit] = await pool.execute(
+            'SELECT * FROM units WHERE id = ?',
+            [unitId]
         );
+        
+        if (currentUnit.length === 0) {
+            return res.status(404).json({ error: 'Unit not found' });
+        }
+        
+        const unit = currentUnit[0];
+        const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        
+        let updateQuery = 'UPDATE units SET status = ?';
+        let updateValues = [status];
+        
+        // Auto-set start_date when status is "In Progress" and start_date is null
+        if (status === 'In Progress' && !unit.start_date) {
+            updateQuery += ', start_date = ?';
+            updateValues.push(today);
+            console.log(`Setting start_date to ${today} for unit ${unitId}`);
+        }
+        
+        // Auto-set end_date when status is "Completed" and end_date is null
+        if (status === 'Completed' && !unit.end_date) {
+            updateQuery += ', end_date = ?';
+            updateValues.push(today);
+            console.log(`Setting end_date to ${today} for unit ${unitId}`);
+        }
+        
+        updateQuery += ' WHERE id = ?';
+        updateValues.push(unitId);
+        
+        await pool.execute(updateQuery, updateValues);
         
         const [updatedUnit] = await pool.execute(
             'SELECT * FROM units WHERE id = ?',
             [unitId]
         );
         
+        console.log('Unit updated:', updatedUnit[0]);
         res.json(updatedUnit[0]);
     } catch (error) {
         console.error('Update unit status error:', error);

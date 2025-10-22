@@ -165,14 +165,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   const handleUpdateUnitStatus = async (projectId: number, unitId: number, newStatus: Unit['status']) => {
     try {
-      await API.patch(`/units/${unitId}/status`, { status: newStatus });
+      const response = await API.patch(`/units/${unitId}/status`, { status: newStatus });
+      const updatedUnitFromServer = response.data;
       
-      // Update local state immediately for better UX
+      // Update local state with data from server (includes auto-set dates)
       setProjects(prev => prev.map(project => {
         if (project.id === projectId) {
-          // Update the unit status
+          // Update the unit with fresh data from server
           const updatedUnits = project.units.map(unit => 
-            unit.id === unitId ? { ...unit, status: newStatus } : unit
+            unit.id === unitId ? updatedUnitFromServer : unit
           );
           
           // Recalculate project status based on unit statuses
@@ -187,9 +188,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         return project;
       }));
       
-      // Show success message
-      setSuccess('Unit status updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+      // Show success message with date info
+      let message = 'Unit status updated successfully!';
+      if (newStatus === 'In Progress' && updatedUnitFromServer.start_date) {
+        message += ` Start date set to ${new Date(updatedUnitFromServer.start_date).toLocaleDateString()}.`;
+      } else if (newStatus === 'Completed' && updatedUnitFromServer.end_date) {
+        message += ` End date set to ${new Date(updatedUnitFromServer.end_date).toLocaleDateString()}.`;
+      }
+      
+      setSuccess(message);
+      setTimeout(() => setSuccess(''), 4000);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to update unit status');
     }
